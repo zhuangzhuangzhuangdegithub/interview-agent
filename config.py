@@ -3,16 +3,17 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# ── Paths ──
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Load .env from absolute path
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 # ── LLM ──
 LLM_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 LLM_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-
-# ── Paths (D drive) ──
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 D_DRIVE_ROOT = os.getenv("D_DRIVE_ROOT", "D:/")
 PG_DATA_DIR = os.getenv("PG_DATA_DIR", "D:/PostgreSQL/15/data")
 REDIS_DATA_DIR = os.getenv("REDIS_DATA_DIR", "D:/Redis/data")
