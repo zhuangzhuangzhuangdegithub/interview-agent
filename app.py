@@ -13,8 +13,10 @@ def main():
         st.session_state.messages = []
     if "mode" not in st.session_state:
         st.session_state.mode = "idle"
+    if "agent" not in st.session_state:
+        st.session_state.agent = InterviewAgent()
 
-    agent = InterviewAgent()
+    agent = st.session_state.agent
 
     # Display history
     for msg in st.session_state.messages:
