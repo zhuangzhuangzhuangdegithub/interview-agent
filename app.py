@@ -15,20 +15,27 @@ def main():
 
     agent = get_agent()
 
-    # Sidebar controls
+    # Init session state
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "mode" not in st.session_state:
+        st.session_state.mode = "idle"  # idle | waiting_answer
+
+    # Sidebar
     with st.sidebar:
+        st.subheader("状态")
+        mode_labels = {"idle": "等待指令", "waiting_answer": "等待你回答题目"}
+        st.info(f"当前模式：{mode_labels.get(st.session_state.mode, '未知')}")
+
         st.subheader("快捷操作")
         if st.button("🔄 重置会话", use_container_width=True):
             agent.reset()
             st.session_state.messages = []
+            st.session_state.mode = "idle"
             st.rerun()
         if st.button("📊 生成报告", use_container_width=True):
             report = agent.generate_report()
             st.info(report)
-
-    # Init message history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
 
     # Display history
     for msg in st.session_state.messages:
@@ -36,7 +43,11 @@ def main():
             st.markdown(msg["content"])
 
     # Chat input
-    if prompt := st.chat_input("输入'练习 LLM基础'开始出题，或直接输入问题..."):
+    placeholder = "输入'练习 LLM基础'开始出题"
+    if st.session_state.mode == "waiting_answer":
+        placeholder = "输入你的回答..."
+
+    if prompt := st.chat_input(placeholder):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -45,6 +56,7 @@ def main():
             with st.spinner("思考中..."):
                 lower = prompt.strip().lower()
 
+                # Route based on current mode AND message content
                 if lower.startswith("练习") or lower.startswith("开始"):
                     parts = prompt.strip().split()
                     module = parts[1] if len(parts) > 1 else None
@@ -52,19 +64,22 @@ def main():
                     if len(parts) > 2 and parts[2].isdigit():
                         difficulty = int(parts[2])
                     resp = agent.start_practice(module=module, difficulty=difficulty)
-                elif lower.startswith("回答") or lower.startswith("我的答案"):
-                    answer = prompt.strip()
-                    for prefix in ["回答", "我的答案", "answer"]:
-                        if answer.startswith(prefix):
-                            answer = answer[len(prefix):].strip()
-                            break
-                    resp = agent.evaluate_answer(answer)
-                elif lower == "报告":
+                    st.session_state.mode = "waiting_answer"
+
+                elif st.session_state.mode == "waiting_answer":
+                    # User is answering the current question
+                    resp = agent.evaluate_answer(prompt)
+                    st.session_state.mode = "idle"
+
+                elif lower in ("报告", "report"):
                     resp = agent.generate_report()
-                elif lower == "重置":
+
+                elif lower in ("重置", "reset"):
                     agent.reset()
                     st.session_state.messages = []
+                    st.session_state.mode = "idle"
                     resp = "已重置。输入'练习'开始。"
+
                 else:
                     resp = agent.chat(prompt)
 
