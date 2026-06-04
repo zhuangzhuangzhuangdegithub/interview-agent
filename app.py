@@ -3,17 +3,12 @@ import streamlit as st
 from agent.orchestrator import InterviewAgent
 
 
-@st.cache_resource
-def get_agent():
-    return InterviewAgent()
-
-
 def main():
     st.set_page_config(page_title="AI 面试陪练", page_icon="🎓")
     st.title("🎓 AI 面试陪练 Agent")
     st.caption("基于 Agentic RAG 的智能面试教练 · LLM基础 / Agent架构 / RAG / Prompt工程")
 
-    agent = get_agent()
+    agent = InterviewAgent()
 
     # Init session state
     if "messages" not in st.session_state:
