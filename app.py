@@ -1,4 +1,4 @@
-"""Gradio web interface for Interview Agent."""
+"""Gradio web interface for Interview Agent — Gradio 6.x compatible (no type param)."""
 import gradio as gr
 from agent.orchestrator import InterviewAgent
 
@@ -6,8 +6,7 @@ agent = InterviewAgent()
 
 
 def respond(message: str, history: list):
-    """Handle chat. Gradio 6.x passes history as list of dicts."""
-    # Guard against None
+    """Handle chat. history is list of tuples (user_msg, bot_msg)."""
     if history is None:
         history = []
 
@@ -38,9 +37,7 @@ def respond(message: str, history: list):
     else:
         resp = agent.chat(message)
 
-    # Append to history as dicts
-    history.append({"role": "user", "content": message})
-    history.append({"role": "assistant", "content": resp})
+    history.append((message, resp))
     return "", history
 
 
@@ -48,16 +45,8 @@ with gr.Blocks(title="AI 面试陪练") as demo:
     gr.Markdown("# AI 面试陪练 Agent")
     gr.Markdown("基于 Agentic RAG 的智能面试教练")
 
-    chatbot = gr.Chatbot(
-        height=500,
-        type="messages",
-        value=[],  # Start with empty list
-    )
-    msg = gr.Textbox(
-        placeholder="输入'练习 LLM基础'开始出题...",
-        label="消息",
-        elem_id="chat-input",
-    )
+    chatbot = gr.Chatbot(height=500)
+    msg = gr.Textbox(placeholder="输入'练习 LLM基础'开始出题...", label="消息", elem_id="chat-input")
 
     with gr.Row():
         gr.Examples(["练习 LLM基础", "练习 Agent架构 2", "报告", "重置"], inputs=msg)
