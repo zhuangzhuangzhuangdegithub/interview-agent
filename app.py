@@ -1,12 +1,12 @@
-"""Gradio web interface for Interview Agent — dict format for Gradio 6.x."""
+"""Gradio web interface for Interview Agent — Gradio 6.x with correct content list format."""
 import gradio as gr
 from agent.orchestrator import InterviewAgent
 
 agent = InterviewAgent()
 
 
-def respond(message: str, history):
-    """Handle chat. Gradio 6.x expects dict format with role+content."""
+def respond(message: str, history: list):
+    """Handle chat. Gradio 6.x expects: {role, content: [{type:'text', text:'...'}]}"""
     if history is None:
         history = []
 
@@ -37,10 +37,10 @@ def respond(message: str, history):
     else:
         resp = agent.chat(message)
 
-    # Return dict format for Gradio 6.x
+    # Gradio 6.x format: content must be list of {type, text}
     new_history = list(history)
-    new_history.append(gr.ChatMessage(role="user", content=message))
-    new_history.append(gr.ChatMessage(role="assistant", content=resp))
+    new_history.append({"role": "user", "content": [{"type": "text", "text": message}]})
+    new_history.append({"role": "assistant", "content": [{"type": "text", "text": resp}]})
     return "", new_history
 
 
