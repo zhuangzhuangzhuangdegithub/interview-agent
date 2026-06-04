@@ -1,12 +1,12 @@
-"""Gradio web interface for Interview Agent — Gradio 6.x compatible (no type param)."""
+"""Gradio web interface for Interview Agent — dict format for Gradio 6.x."""
 import gradio as gr
 from agent.orchestrator import InterviewAgent
 
 agent = InterviewAgent()
 
 
-def respond(message: str, history: list):
-    """Handle chat. history is list of tuples (user_msg, bot_msg)."""
+def respond(message: str, history):
+    """Handle chat. Gradio 6.x expects dict format with role+content."""
     if history is None:
         history = []
 
@@ -37,8 +37,11 @@ def respond(message: str, history: list):
     else:
         resp = agent.chat(message)
 
-    history.append((message, resp))
-    return "", history
+    # Return dict format for Gradio 6.x
+    new_history = list(history)
+    new_history.append(gr.ChatMessage(role="user", content=message))
+    new_history.append(gr.ChatMessage(role="assistant", content=resp))
+    return "", new_history
 
 
 with gr.Blocks(title="AI 面试陪练") as demo:
