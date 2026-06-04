@@ -53,7 +53,11 @@ with gr.Blocks(title="AI 面试陪练") as demo:
         type="messages",
         value=[],  # Start with empty list
     )
-    msg = gr.Textbox(placeholder="输入'练习 LLM基础'开始出题...", label="消息")
+    msg = gr.Textbox(
+        placeholder="输入'练习 LLM基础'开始出题...",
+        label="消息",
+        elem_id="chat-input",
+    )
 
     with gr.Row():
         gr.Examples(["练习 LLM基础", "练习 Agent架构 2", "报告", "重置"], inputs=msg)
