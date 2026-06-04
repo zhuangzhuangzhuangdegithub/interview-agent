@@ -1,13 +1,13 @@
-"""Gradio web interface for Interview Agent — Gradio 6.0 compatible."""
+"""Gradio web interface for Interview Agent — Gradio 6.x compatible."""
 import gradio as gr
 from agent.orchestrator import InterviewAgent
 
 agent = InterviewAgent()
 
 
-def respond(message, history):
-    """Handle chat messages. history is list of {"role":"user/assistant","content":"..."}"""
-    if not message.strip():
+def respond(message: str, history: list):
+    """Handle chat. In Gradio 6.x, history is list of dicts with role/content."""
+    if not message or not message.strip():
         return "", history
 
     lower = message.strip().lower()
@@ -38,7 +38,7 @@ def respond(message, history):
     else:
         resp = agent.chat(message)
 
-    # Gradio 6.0: history is list of dicts, not tuples
+    # Build history in Gradio 6.x dict format
     new_history = list(history) if history else []
     new_history.append({"role": "user", "content": message})
     new_history.append({"role": "assistant", "content": resp})
@@ -47,15 +47,23 @@ def respond(message, history):
 
 with gr.Blocks(title="AI 面试陪练") as demo:
     gr.Markdown("# AI 面试陪练 Agent")
-    gr.Markdown("基于 Agentic RAG 的智能面试教练。LLM基础 / Agent架构 / RAG / Prompt工程")
+    gr.Markdown("基于 Agentic RAG 的智能面试教练。")
 
-    chatbot = gr.Chatbot(height=500, type="messages")
-    msg = gr.Textbox(placeholder="输入'练习 LLM基础'开始出题...", label="")
+    chatbot = gr.Chatbot(
+        height=500,
+        type="messages",
+        placeholder="输入'练习 LLM基础'开始出题..."
+    )
+    msg = gr.Textbox(placeholder="输入消息...", label="消息", container=False)
 
     with gr.Row():
         gr.Examples(["练习 LLM基础", "练习 Agent架构 2", "报告", "重置"], inputs=msg)
 
-    msg.submit(respond, [msg, chatbot], [msg, chatbot])
+    msg.submit(
+        fn=respond,
+        inputs=[msg, chatbot],
+        outputs=[msg, chatbot]
+    )
 
 
 if __name__ == "__main__":
