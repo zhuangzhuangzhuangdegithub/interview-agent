@@ -1,39 +1,48 @@
-"""Application configuration. Loads from environment variables with sensible defaults."""
-
+"""Application configuration. Reads .env directly to avoid env-var issues."""
 import os
-from dotenv import load_dotenv
 
-# ── Paths ──
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+ENV_FILE = os.path.join(PROJECT_ROOT, ".env")
 
-# Load .env from absolute path
-load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+
+def _read_env():
+    """Parse .env file directly, return dict."""
+    config = {}
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    config[key.strip()] = value.strip()
+    return config
+
+
+_env = _read_env()
 
 # ── LLM ──
-LLM_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-LLM_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-D_DRIVE_ROOT = os.getenv("D_DRIVE_ROOT", "D:/")
-PG_DATA_DIR = os.getenv("PG_DATA_DIR", "D:/PostgreSQL/15/data")
-REDIS_DATA_DIR = os.getenv("REDIS_DATA_DIR", "D:/Redis/data")
-REDIS_CONFIG = os.getenv("REDIS_CONFIG", "D:/Redis/redis.conf")
+LLM_API_KEY = _env.get("DEEPSEEK_API_KEY", "")
+LLM_API_BASE = _env.get("DEEPSEEK_API_BASE", "https://api.deepseek.com")
+LLM_MODEL = _env.get("LLM_MODEL", "deepseek-chat")
+EMBEDDING_MODEL = _env.get("EMBEDDING_MODEL", "text-embedding-3-small")
 
 # ── Database ──
-PG_HOST = os.getenv("PG_HOST", "localhost")
-PG_PORT = int(os.getenv("PG_PORT", "5432"))
-PG_DATABASE = os.getenv("PG_DATABASE", "interview_agent")
-PG_USER = os.getenv("PG_USER", "postgres")
-PG_PASSWORD = os.getenv("PG_PASSWORD", "postgres")
+PG_HOST = _env.get("PG_HOST", "localhost")
+PG_PORT = int(_env.get("PG_PORT", "5432"))
+PG_DATABASE = _env.get("PG_DATABASE", "interview_agent")
+PG_USER = _env.get("PG_USER", "postgres")
+PG_PASSWORD = _env.get("PG_PASSWORD", "postgres")
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_HOST = _env.get("REDIS_HOST", "localhost")
+REDIS_PORT = int(_env.get("REDIS_PORT", "6379"))
+REDIS_DB = int(_env.get("REDIS_DB", "0"))
 
 # ── Agent ──
-AGENT_MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
-AGENT_VERBOSE = os.getenv("AGENT_VERBOSE", "true").lower() == "true"
-SESSION_TTL = int(os.getenv("SESSION_TTL", "3600"))  # Redis TTL: 1 hour
+AGENT_MAX_ITERATIONS = int(_env.get("AGENT_MAX_ITERATIONS", "10"))
+AGENT_VERBOSE = _env.get("AGENT_VERBOSE", "true").lower() == "true"
+SESSION_TTL = int(_env.get("SESSION_TTL", "3600"))
 
-# ── Fine-tuning (future) ──
-FINE_TUNED_MODEL_PATH = os.getenv("FINE_TUNED_MODEL_PATH", "./models/qwen-interview-lora")
+# ── Paths ──
+PG_DATA_DIR = _env.get("PG_DATA_DIR", "D:/PostgreSQL/15/data")
+REDIS_DATA_DIR = _env.get("REDIS_DATA_DIR", "D:/Redis/data")
+FINE_TUNED_MODEL_PATH = _env.get("FINE_TUNED_MODEL_PATH", "./models/qwen-interview-lora")
