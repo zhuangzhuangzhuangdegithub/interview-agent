@@ -1,7 +1,5 @@
--- Interview Agent Database Schema
--- Requires: PostgreSQL 15+ with pgvector extension
-
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Interview Agent Database Schema (Development Version)
+-- Uses JSON for embeddings (pgvector upgrade: just change column type)
 
 -- 题目主表
 CREATE TABLE IF NOT EXISTS questions (
@@ -12,18 +10,12 @@ CREATE TABLE IF NOT EXISTS questions (
     difficulty SMALLINT CHECK (difficulty BETWEEN 1 AND 3),
     tags TEXT[] DEFAULT '{}',
     source VARCHAR(50) DEFAULT 'builtin',
+    embedding JSONB DEFAULT '[]',
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 向量索引
-CREATE TABLE IF NOT EXISTS question_embeddings (
-    id SERIAL PRIMARY KEY,
-    question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
-    embedding VECTOR(1536)
-);
-CREATE INDEX IF NOT EXISTS idx_question_embeddings
-    ON question_embeddings USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_questions_module ON questions(module);
+CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON questions(difficulty);
 
 -- 练习记录
 CREATE TABLE IF NOT EXISTS practice_records (
