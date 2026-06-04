@@ -1,0 +1,17 @@
+# LLM
+openai>=1.0.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+
+# Database
+psycopg2-binary>=2.9
+redis>=5.0.0
+pgvector>=0.3.0
+
+# Web
+gradio>=5.0.0
+
+# Utils
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+numpy>=1.24.0
