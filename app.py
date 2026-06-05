@@ -61,9 +61,18 @@ def interview_tab():
             with st.spinner("思考中..."):
                 lower = prompt.strip().lower()
                 if lower.startswith("练习") or lower.startswith("开始"):
-                    parts = prompt.strip().split()
-                    module = parts[1] if len(parts) > 1 else None
-                    difficulty = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+                    text = prompt.strip()
+                    module = None; difficulty = None
+                    # Support both "练习 Agent架构" and "练习Agent架构"
+                    if text.startswith("练习"):
+                        rest = text[2:].strip()  # Remove "练习"
+                    else:
+                        rest = text[2:].strip()  # Remove "开始"
+                    if rest:
+                        parts = rest.split()
+                        module = parts[0]  # First word is module
+                        if len(parts) > 1 and parts[1].isdigit():
+                            difficulty = int(parts[1])
                     resp = agent.start_practice(module=module, difficulty=difficulty)
                     st.session_state.mode = "waiting_answer"
                 elif st.session_state.mode == "waiting_answer":
