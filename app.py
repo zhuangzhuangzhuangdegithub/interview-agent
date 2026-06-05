@@ -12,14 +12,20 @@ def interview_tab():
     if "mode" not in st.session_state: st.session_state.mode = "idle"
     own_key = bool(st.session_state.get("user_api_key")) or bool(DEFAULT_KEY)
     if own_key:
-        if "agent" not in st.session_state:
+        current_key = st.session_state.get("user_api_key") or DEFAULT_KEY
+        current_base = st.session_state.get("user_api_base") or DEFAULT_BASE
+        current_model = st.session_state.get("user_api_model") or DEFAULT_MODEL
+        # Recreate agent if API key changed or not exists
+        if "agent" not in st.session_state or st.session_state.get("_agent_key") != current_key:
             st.session_state.agent = InterviewGraphAgent(
-                api_key=st.session_state.get("user_api_key") or DEFAULT_KEY,
-                base_url=st.session_state.get("user_api_base") or DEFAULT_BASE,
-                model=st.session_state.get("user_api_model") or DEFAULT_MODEL,
+                api_key=current_key, base_url=current_base, model=current_model
             )
+            st.session_state._agent_key = current_key
         agent = st.session_state.agent
     else:
+        # No key available - clear existing agent
+        if "agent" in st.session_state:
+            del st.session_state.agent
         agent = None
 
     for msg in st.session_state.messages:
