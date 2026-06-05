@@ -177,6 +177,7 @@ def review_tab():
 def main():
     st.set_page_config(page_title="AI 面试陪练", page_icon="🤖")
     if "page" not in st.session_state: st.session_state.page = "interview"
+    own_key = bool(st.session_state.get("user_api_key")) or bool(DEFAULT_KEY)
 
     with st.sidebar:
         st.subheader("⚙️ API 设置")
