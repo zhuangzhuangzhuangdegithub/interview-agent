@@ -9,6 +9,19 @@ def main():
     st.title("🎓 AI 面试陪练 Agent")
     st.caption("基于 Agentic RAG 的智能面试教练 · LLM基础 / Agent架构 / RAG / Prompt工程")
 
+    # Keyboard shortcuts via JS injection
+    st.markdown("""
+    <script>
+    document.addEventListener('keydown', function(e) {
+        const input = document.querySelector('[data-testid="stChatInput"] textarea');
+        if (!input || document.activeElement !== input) return;
+        if (e.ctrlKey && e.key === 'p') { e.preventDefault(); input.value = '练习 '; input.dispatchEvent(new Event('input', {bubbles: true})); }
+        if (e.ctrlKey && e.key === 'r') { e.preventDefault(); input.value = '报告'; input.dispatchEvent(new Event('input', {bubbles: true})); }
+        if (e.ctrlKey && e.key === 'x') { e.preventDefault(); input.value = '重置'; input.dispatchEvent(new Event('input', {bubbles: true})); }
+    });
+    </script>
+    """, unsafe_allow_html=True)
+
     # Init session state
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -88,6 +101,9 @@ def main():
                     st.caption(line)
         except Exception:
             pass
+
+        st.subheader("⌨️ 快捷键")
+        st.caption("输入框聚焦时：Ctrl+P 练习 | Ctrl+R 报告 | Ctrl+X 重置")
 
         st.subheader("快捷操作")
         if st.button("🔄 重置会话", use_container_width=True):
