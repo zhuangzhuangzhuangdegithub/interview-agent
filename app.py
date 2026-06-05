@@ -158,8 +158,31 @@ def main():
                     st.info(st.session_state.agent.generate_report())
 
         st.divider()
-        st.caption("支持 JSON：`[{\"question\":\"...\",\"answer\":\"...\",\"tags\":[...]}]`")
-        uf = st.file_uploader("📁 一键导入文件", type=["json","md","txt"])
+        st.subheader("📁 一键导入题库")
+        with st.expander("📋 查看支持的格式"):
+            st.markdown("""
+**JSON 格式** — 推荐用于结构化导入：
+```json
+[
+  {
+    "question": "什么是 RAG？",
+    "answer": "RAG 即检索增强生成...",
+    "difficulty": 2,
+    "tags": ["RAG", "LLM"]
+  }
+]
+```
+**Markdown / TXT 格式** — 适合笔记导入：
+```
+Q: 什么是 RAG？
+RAG 即检索增强生成，是一种结合检索和生成的技术...
+
+Q: Agent 和普通 LLM 的区别？
+Agent 具有自主规划和工具调用能力...
+```
+每条 `Q:` 开头为题目，下方段落为答案，题目之间自动分隔。
+""")
+        uf = st.file_uploader("选择文件上传", type=["json","md","txt"])
         if uf is not None:
             dm = st.selectbox("导入到模块", get_all_modules() or ["LLM基础"])
             if st.button("开始导入", use_container_width=True):
