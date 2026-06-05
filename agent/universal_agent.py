@@ -1,188 +1,128 @@
-"""Universal Agent — auto-detects Claude SDK vs OpenAI SDK based on base URL."""
+"""Universal Agent — OpenAI SDK with tool calling fallback for DeepSeek."""
 import json, re, uuid, os
-from typing import AsyncGenerator
-
 import sys
 sys.path.insert(0, "D:/whu/大三下/练习/agent")
 
 from tools.search import search_questions as db_search, get_question_by_id
 from agent.memory import save_conversation, load_conversation, update_user_model, format_user_context, get_adaptive_difficulty, get_weak_modules
 
-
-def _is_anthropic(base_url: str) -> bool:
-    return base_url and ("anthropic.com" in base_url or "claude" in base_url.lower())
+TOOL_DEFS = [
+    {"type": "function", "function": {
+        "name": "search_questions",
+        "description": "搜索面试题库。query 参数为模块名或关键词，如 'LLM基础' 或 'Agent架构'。",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+    }},
+    {"type": "function", "function": {
+        "name": "get_question",
+        "description": "获取题目详情。question_id 为题目的数字ID。",
+        "parameters": {"type": "object", "properties": {"question_id": {"type": "integer"}}, "required": ["question_id"]}
+    }}
+]
 
 
 class UniversalAgent:
-    """Auto-switches between Claude SDK and OpenAI SDK based on provider."""
 
     def __init__(self, api_key: str = None, base_url: str = None, model: str = None):
+        from openai import OpenAI
         self.api_key = api_key or ""
         self.base_url = base_url or "https://api.deepseek.com"
         self.model = model or "deepseek-chat"
         self.user_id = "default"
-        self._backend = "openai"  # default
-        self._client = None
-
-        if _is_anthropic(self.base_url):
-            self._backend = "claude"
-            self._init_claude()
-        else:
-            self._init_openai()
-
-    def _init_openai(self):
-        from openai import OpenAI
+        self._last_thinking = []
         self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-    def _init_claude(self):
-        os.environ["ANTHROPIC_API_KEY"] = self.api_key
-        if self.base_url:
-            os.environ["ANTHROPIC_BASE_URL"] = self.base_url
-
-    def _build_system(self) -> str:
+    def _system(self) -> str:
         ctx = format_user_context(self.user_id)
         return f"""你是 AI 面试教练。用户画像：{ctx}
 
-工具：你可以调用以下函数：
-- search_questions(query) → 搜索题库，返回题目列表
-- get_question(id) → 获取题目详情和答案
+你必须使用 function_call 调用工具，不要用文本描述工具调用。可用工具：
+- search_questions(query) — 搜索题库
+- get_question(question_id) — 获取题目详情
 
-流程：用户说"练习XX"→搜索XX模块→选一题展示→等用户回答→评分1-10并反馈。
-薄弱模块优先出题，自适应调整难度。始终中文回复。"""
+流程：用户说"练习XX"→调用 search_questions(query=XX)→选一题展示→等回答→评分1-10。
+始终中文回复。"""
 
-    def _call_openai(self, prompt: str, tools: list = None) -> str:
-        thinking = ["🤔 正在分析用户输入..."]
-        messages = [{"role": "system", "content": self._build_system()}]
+    def _execute_tools(self, messages: list, msg, thinking: list) -> str:
+        """Execute tool calls from a message and return final response."""
+        thinking.append(f"🔧 Agent 调用 {len(msg.tool_calls)} 个工具")
+        messages.append(msg)
+
+        for tc in msg.tool_calls:
+            fn = tc.function.name
+            args = json.loads(tc.function.arguments)
+            thinking.append(f"  📞 {fn}({json.dumps(args, ensure_ascii=False)})")
+
+            if fn == "search_questions":
+                results = db_search(keyword=args.get("query", ""), top_k=10)
+                tool_text = "\n".join([f"ID:{r['id']} [{r['module']}] L{r['difficulty']} {r['question'][:100]}" for r in results]) or "无结果"
+                thinking.append(f"  📋 找到 {len(results)} 条结果")
+            elif fn == "get_question":
+                q = get_question_by_id(args.get("question_id", 0))
+                tool_text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
+                thinking.append("  📖 已获取题目详情")
+            else:
+                tool_text = "未知工具"
+            messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
+
+        thinking.append("💭 基于工具结果生成回复...")
+        resp2 = self._client.chat.completions.create(
+            model=self.model, messages=messages, temperature=0.7
+        )
+        self._last_thinking = thinking
+        return resp2.choices[0].message.content or ""
+
+    def _call(self, prompt: str, use_tools: bool = True) -> str:
+        thinking = ["🤔 分析用户输入..."]
+        messages = [{"role": "system", "content": self._system()}]
         history = load_conversation(self.user_id)
         for h in history[-10:]:
             messages.append(h)
         messages.append({"role": "user", "content": prompt})
 
+        tools = TOOL_DEFS if use_tools else None
         kwargs = {"model": self.model, "messages": messages, "temperature": 0.7}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
+        # First attempt
         resp = self._client.chat.completions.create(**kwargs)
         msg = resp.choices[0].message
+
+        # Success: structured tool calls
+        if msg.tool_calls:
+            return self._execute_tools(messages, msg, thinking)
+
         content = msg.content or ""
 
-        # Handle structured tool calls (OpenAI format)
-        if msg.tool_calls:
-            thinking.append(f"🔧 Agent 决定调用 {len(msg.tool_calls)} 个工具")
-            messages.append(msg)
-
-            for tc in msg.tool_calls:
-                fn = tc.function.name
-                args = json.loads(tc.function.arguments)
-                thinking.append(f"  📞 {fn}({json.dumps(args, ensure_ascii=False)})")
-
-                if fn == "search_questions":
-                    results = db_search(keyword=args.get("query", ""), top_k=10)
-                    tool_text = "\n".join([f"ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "无结果"
-                    thinking.append(f"  📋 返回 {len(results)} 条结果")
-                elif fn == "get_question":
-                    q = get_question_by_id(args.get("question_id", 0))
-                    tool_text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
-                    thinking.append(f"  📖 已获取题目详情")
-                else:
-                    tool_text = "未知工具"
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
-
-            thinking.append("💭 Agent 正在基于结果生成回复...")
-            resp2 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
-            self._last_thinking = thinking
-            return resp2.choices[0].message.content or ""
-
-        # Handle pseudo-XML tool calls (DeepSeek text format)
-        import re as _re
-        xml_match = _re.search(r"<search_questions>(.*?)</search_questions>|<get_question>(.*?)</get_question>", content, _re.DOTALL)
-        if xml_match and tools:
-            thinking.append("🔧 检测到文本格式工具调用（DeepSeek 模式）")
-            # Strip the XML from the response and re-query
-            clean_prompt = f"请实际执行工具调用。提示：{content[:200]}。用户原始请求：{prompt}"
-            thinking.append("🔄 重新请求 Agent 执行工具...")
-            resp2 = self._client.chat.completions.create(
-                model=self.model,
-                messages=messages + [{"role": "assistant", "content": "请使用 function calling 调用工具。"}],
-                tools=tools, tool_choice="auto", temperature=0.7
-            )
+        # If content contains XML/伪代码 tool calls, retry with stronger instruction
+        if content and (">" in content and ("search_questions" in content or "get_question" in content)):
+            thinking.append("⚠️ 模型返回文本格式工具调用，重新请求...")
+            messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "user", "content": "请使用 JSON function_call 格式调用工具。不要用 XML 或伪代码。"})
+            kwargs["temperature"] = 0.3
+            resp2 = self._client.chat.completions.create(**kwargs)
             msg2 = resp2.choices[0].message
             if msg2.tool_calls:
-                thinking.append(f"🔧 第二次尝试成功，调用 {len(msg2.tool_calls)} 个工具")
-                messages.append(msg2)
-                for tc in msg2.tool_calls:
-                    fn = tc.function.name; args = json.loads(tc.function.arguments)
-                    thinking.append(f"  📞 {fn}({json.dumps(args, ensure_ascii=False)})")
-                    if fn == "search_questions":
-                        results = db_search(keyword=args.get("query", ""), top_k=10)
-                        tool_text = "\n".join([f"ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "无结果"
-                    elif fn == "get_question":
-                        q = get_question_by_id(args.get("question_id", 0))
-                        tool_text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
-                    else:
-                        tool_text = "未知工具"
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
-                thinking.append("💭 生成最终回复...")
-                resp3 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
-                self._last_thinking = thinking
-                return resp3.choices[0].message.content or ""
+                return self._execute_tools(messages, msg2, thinking)
 
-        # No tools, direct response
-        thinking.append("💬 直接回复（无需工具）")
+            # Still no tool_calls — return cleaned content as-is
+            thinking.append("💬 直接回复（2次尝试后仍无结构化工具调用）")
+            self._last_thinking = thinking
+            return content[:800]
+
+        thinking.append("💬 直接回复")
         self._last_thinking = thinking
         return content
 
-    def _call_claude(self, prompt: str) -> str:
-        from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
-        import anyio
-
-        async def _run():
-            parts = []
-            opts = ClaudeAgentOptions(
-                system_prompt=self._build_system(),
-                max_turns=3,
-                model=self.model,
-                allowed_tools=[],
-            )
-            async for msg in query(prompt=prompt, options=opts):
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock):
-                            parts.append(block.text)
-            return "\n".join(parts)
-
-        return anyio.run(_run)
-
-    def _call(self, prompt: str) -> str:
-        if self._backend == "claude":
-            return self._call_claude(prompt)
-        else:
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "search_questions",
-                        "description": "搜索面试题库。参数：query(模块名或关键词)",
-                        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_question",
-                        "description": "获取题目详情。参数：question_id(题目ID)",
-                        "parameters": {"type": "object", "properties": {"question_id": {"type": "integer"}}, "required": ["question_id"]}
-                    }
-                }
-            ]
-            return self._call_openai(prompt, tools)
+    @property
+    def last_thinking(self) -> list:
+        return getattr(self, "_last_thinking", [])
 
     def chat(self, user_input: str) -> str:
         history = load_conversation(self.user_id)
         context = "\n".join([f"{h['role']}：{h['content'][:200]}" for h in history[-6:]])
-        resp = self._call(f"历史：\n{context}\n\n用户：{user_input}")
-
+        resp = self._call(f"历史：\n{context}\n\n用户：{user_input}", use_tools=False)
         history.append({"role": "user", "content": user_input})
         history.append({"role": "assistant", "content": resp})
         save_conversation(self.user_id, history[-50:])
@@ -193,17 +133,17 @@ class UniversalAgent:
         weak = get_weak_modules(self.user_id)
         mod = module or (weak[0] if weak else None)
         if mod:
-            return self._call(f"请用 search_questions 搜索{mod}模块，选一道难度{diff}的题展示。只出题不展示答案。")
-        return self._call(f"请用 search_questions 随机搜索，选一道难度{diff}的题展示。只出题不展示答案。")
+            return self._call(f"请调用 search_questions(query='{mod}') 搜索，选一道难度{diff}的题展示。只出题不展示答案。")
+        return self._call(f"请调用 search_questions(query='LLM基础') 搜索，选一道难度{diff}的题展示。只出题不展示答案。")
 
     def evaluate_answer(self, user_answer: str) -> str:
         history = load_conversation(self.user_id)
         last_q = ""
         for h in reversed(history):
-            if h.get("role") == "assistant" and "【模块】" in h.get("content", ""):
+            if h.get("role") == "assistant" and ("【模块】" in h.get("content", "") or "题目" in h.get("content", "")):
                 last_q = h["content"][:300]
                 break
-        resp = self._call(f"评分(1-10)并反馈。题目：{last_q}\n回答：{user_answer}")
+        resp = self._call(f"评分(1-10)并反馈。题目：{last_q}\n回答：{user_answer}", use_tools=False)
         try:
             m = re.search(r"(\d+)/10|评分[：:]\s*(\d+)", resp)
             score = int(m.group(1) or m.group(2)) if m else 5
@@ -213,11 +153,7 @@ class UniversalAgent:
         return resp
 
     def generate_report(self) -> str:
-        return self._call(f"生成本次练习报告。{format_user_context(self.user_id)}")
-
-    @property
-    def last_thinking(self) -> list:
-        return getattr(self, "_last_thinking", [])
+        return self._call(f"生成练习报告。{format_user_context(self.user_id)}", use_tools=False)
 
     def reset(self):
         self._last_thinking = []
