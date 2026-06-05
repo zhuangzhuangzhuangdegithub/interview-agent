@@ -219,9 +219,7 @@ def main():
 
     with st.sidebar:
         st.subheader("🌐 访问地址")
-        st.caption("本机：http://localhost")
-        st.caption("局域网：http://10.138.196.221")
-        st.caption("外网：http://222.20.193.39")
+        st.caption("公网：https://cobalt-amusement-landless.ngrok-free.dev")
 
         st.divider()
         st.subheader("⚙️ API 设置")
