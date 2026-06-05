@@ -9,7 +9,8 @@ def interview_tab():
     """AI 面试陪练"""
     if "messages" not in st.session_state: st.session_state.messages = []
     if "mode" not in st.session_state: st.session_state.mode = "idle"
-    if has_api:
+    own_key = bool(st.session_state.get("user_api_key"))
+    if own_key:
         if "agent" not in st.session_state:
             st.session_state.agent = InterviewAgent(
                 api_key=st.session_state.get("user_api_key"),
@@ -23,7 +24,7 @@ def interview_tab():
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-    if not has_api:
+    if not own_key:
         st.warning("⚠️ 请先在侧边栏「⚙️ API 设置」中配置你的 API Key，才能使用 AI 面试陪练功能。自主刷题模式不需要 API Key。")
         return
 
@@ -173,9 +174,6 @@ def main():
     st.set_page_config(page_title="AI 面试陪练", page_icon="🤖")
     if "page" not in st.session_state: st.session_state.page = "interview"
 
-    # Shared state
-    has_api = bool(st.session_state.get("user_api_key"))
-
     with st.sidebar:
         st.subheader("⚙️ API 设置")
         with st.expander("配置 AI API"):
@@ -227,7 +225,7 @@ def main():
         except: pass
 
         if st.session_state.page == "interview":
-            if has_api:
+            if bool(st.session_state.get("user_api_key")):
                 if st.button("🔄 重置会话", use_container_width=True):
                     st.session_state.messages = []; st.session_state.mode = "idle"; st.rerun()
                 if st.button("📊 生成报告", use_container_width=True):
