@@ -67,34 +67,28 @@ class UniversalAgent:
 
         # Handle tool calls
         if msg.tool_calls:
-            thinking = []
+            thinking = [f"🔧 检测到 {len(msg.tool_calls)} 个工具调用"]
+            # MUST append assistant message before tool messages
+            messages.append(msg)
+
             for tc in msg.tool_calls:
                 fn = tc.function.name
                 args = json.loads(tc.function.arguments)
-                thinking.append(f"🔧 调用工具：{fn}({json.dumps(args, ensure_ascii=False)})")
-                if fn == "search_questions":
-                    results = db_search(keyword=args.get("query", ""), top_k=10)
-                    text = "\n".join([f"  · ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "  无结果"
-                    thinking.append(f"📋 搜索结果：\n{text}")
-                elif fn == "get_question":
-                    q = get_question_by_id(args.get("question_id", 0))
-                    text = f"  题目：{q['question'][:100]}..." if q else "  不存在"
-                    thinking.append(f"📖 获取题目：\n{text}")
-                else:
-                    thinking.append(f"  未知工具")
+                thinking.append(f"  📞 {fn}({json.dumps(args, ensure_ascii=False)})")
 
-                # Execute the actual tool call
                 if fn == "search_questions":
                     results = db_search(keyword=args.get("query", ""), top_k=10)
                     tool_text = "\n".join([f"ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "无结果"
+                    thinking.append(f"  📋 返回 {len(results)} 条结果")
                 elif fn == "get_question":
                     q = get_question_by_id(args.get("question_id", 0))
                     tool_text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
+                    thinking.append(f"  📖 已获取题目详情")
                 else:
                     tool_text = "未知工具"
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
 
-            thinking.append("💭 正在分析结果...")
+            thinking.append("💭 分析结果并生成回复...")
             resp2 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
             final = resp2.choices[0].message.content or ""
             self._last_thinking = thinking
