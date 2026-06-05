@@ -60,53 +60,98 @@ def interview_tab():
 
 
 def review_tab():
-    """自主刷题"""
+    """自主刷题 with mastery tracking"""
     st.markdown("## 📝 自主刷题")
     if "rq" not in st.session_state: st.session_state.rq = []
     if "ri" not in st.session_state: st.session_state.ri = 0
     if "sa" not in st.session_state: st.session_state.sa = False
+    if "mastered" not in st.session_state: st.session_state.mastered = set()
+    if "reviewed_count" not in st.session_state: st.session_state.reviewed_count = 0
 
-    c1, c2 = st.columns(2)
-    with c1:
+    # Stats row
+    total_q = len(search_questions(top_k=1000))
+    mastered = len(st.session_state.mastered)
+    reviewed = st.session_state.reviewed_count
+    pending = max(0, total_q - mastered)
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("题库", total_q)
+    with c2: st.metric("已刷", reviewed)
+    with c3: st.metric("已掌握", mastered)
+    with c4: st.metric("待复习", pending)
+
+    # Filters
+    fc1, fc2, fc3 = st.columns([2, 2, 1])
+    with fc1:
         modules = get_all_modules()
         mod = st.selectbox("模块", ["全部"] + (modules if modules else []), key="rm")
-    with c2:
-        diff = st.selectbox("难度", ["全部", "初级", "中级", "高级"], key="rd")
+    with fc2:
+        mode_filter = st.selectbox("范围", ["全部题目", "仅未掌握"], key="rf")
+    with fc3:
+        diff = st.selectbox("难度", ["全部","初级","中级","高级"], key="rd")
 
     if st.button("🔀 随机抽题", use_container_width=True):
         m = None if mod == "全部" else mod
         d = None if diff == "全部" else ["初级","中级","高级"].index(diff)+1
-        results = search_questions(module=m, difficulty=d, top_k=50)
+        results = search_questions(module=m, difficulty=d, top_k=200)
         if results:
             random.shuffle(results)
+            if mode_filter == "仅未掌握":
+                results = [r for r in results if r["id"] not in st.session_state.mastered]
             st.session_state.rq = results; st.session_state.ri = 0; st.session_state.sa = False
             st.rerun()
 
     if not st.session_state.rq:
-        results = search_questions(top_k=50)
+        results = search_questions(top_k=100)
         if results:
             random.shuffle(results)
+            if mode_filter == "仅未掌握":
+                results = [r for r in results if r["id"] not in st.session_state.mastered]
             st.session_state.rq = results
     questions = st.session_state.rq
     total = len(questions)
     if total == 0:
-        st.warning("题库为空")
+        if mode_filter == "仅未掌握":
+            st.success("🎉 全部题目已掌握！")
+        else:
+            st.warning("题库为空")
         return
 
     idx = st.session_state.ri
+    if idx >= total: idx = 0; st.session_state.ri = 0
     st.progress((idx+1)/total, f"第 {idx+1} / {total} 题")
     q = questions[idx]
 
     with st.container(border=True):
         stars = "⭐" * q.get("difficulty", 2)
-        st.caption(f"{q.get('module','')} · {stars}")
+        mastered_str = "✅ 已掌握" if q["id"] in st.session_state.mastered else ""
+        st.caption(f"{q.get('module','')} · {stars}  {mastered_str}")
         st.markdown(f"### {q['question']}")
+
         btn_label = "💡 查看答案" if not st.session_state.sa else "🙈 隐藏答案"
         if st.button(btn_label, use_container_width=True):
             st.session_state.sa = not st.session_state.sa; st.rerun()
         if st.session_state.sa:
             st.divider(); st.markdown(q.get("answer","暂无答案"))
 
+            # Mastery buttons
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                if st.button("✅ 已掌握", use_container_width=True):
+                    st.session_state.mastered.add(q["id"])
+                    st.session_state.reviewed_count += 1
+                    st.session_state.sa = False
+                    st.rerun()
+            with mc2:
+                if st.button("🔄 再复习", use_container_width=True):
+                    st.session_state.mastered.discard(q["id"])
+                    st.session_state.reviewed_count += 1
+                    st.session_state.sa = False
+                    if idx < total - 1:
+                        st.session_state.ri = idx + 1
+                    st.rerun()
+
+    # Navigation
     c1,c2,c3 = st.columns([1,2,1])
     with c1:
         if st.button("⬅ 上一题", disabled=idx==0, use_container_width=True):
