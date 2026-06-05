@@ -132,12 +132,17 @@ class UniversalAgent:
         diff = difficulty or get_adaptive_difficulty(self.user_id)
         weak = get_weak_modules(self.user_id)
         mod = module or (weak[0] if weak else "LLM基础")
-        return self._call(
-            f"请立即调用 search_questions(query='{mod}') 搜索题库。"
-            f"然后从返回结果中直接选一题展示给用户。"
-            f"必须展示完整的题目文字。不要询问用户想搜什么，不要建议其他搜索词。"
-            f"格式：【模块】XXX 【难度】⭐ 【题目】XXX"
-        )
+        # Bypass agent for search — use direct DB query with module filter
+        results = db_search(module=mod, difficulty=diff, top_k=20)
+        if not results:
+            results = db_search(module=mod, top_k=20)
+        if not results:
+            return f"题库中暂无「{mod}」模块的题目。可用模块：LLM基础、Agent架构、RAG与知识库、Prompt工程、工具调用与工作流、微调与部署"
+
+        import random
+        picked = random.choice(results)
+        stars = "⭐" * picked.get("difficulty", 2)
+        return f"【模块】{picked['module']}  【难度】{stars}\n【标签】{', '.join(picked.get('tags', [])[:3])}\n\n📝 {picked['question']}"
 
     def evaluate_answer(self, user_answer: str) -> str:
         history = load_conversation(self.user_id)
