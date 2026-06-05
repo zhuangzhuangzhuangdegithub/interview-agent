@@ -4,6 +4,9 @@ import json, re, random
 from agent.universal_agent import UniversalAgent
 from tools.search import add_question, get_all_modules, search_questions
 from config import LLM_API_KEY as DEFAULT_KEY, LLM_API_BASE as DEFAULT_BASE, LLM_MODEL as DEFAULT_MODEL, PROJECT_ROOT
+from agent.memory import get_user_model
+import plotly.graph_objects as go
+import plotly.express as px
 
 USER_CONFIG_FILE = PROJECT_ROOT + "/user_config.json"
 
@@ -272,6 +275,41 @@ def main():
 
         st.subheader("⌨️ 快捷键")
         st.caption("Ctrl+P 练习 | Ctrl+R 报告 | Ctrl+X 重置")
+
+        # User profile radar chart
+        try:
+            model = get_user_model()
+            module_data = model.get("modules", {})
+            if module_data:
+                st.subheader("🧠 用户画像")
+                modules_list = get_all_modules()
+                scores = []
+                labels = []
+                for m in modules_list:
+                    if m in module_data:
+                        labels.append(m)
+                        scores.append(min(10, module_data[m].get("avg_score", 0) * 10))
+                    else:
+                        labels.append(m)
+                        scores.append(0)
+                if len(labels) >= 3:
+                    # Close the polygon
+                    scores.append(scores[0])
+                    labels.append(labels[0])
+                    fig = go.Figure(data=go.Scatterpolar(
+                        r=scores, theta=labels, fill="toself",
+                        line=dict(color="#7c83ff", width=2),
+                        fillcolor="rgba(124,131,255,0.3)"
+                    ))
+                    fig.update_layout(
+                        polar=dict(radialaxis=dict(range=[0, 10], tickfont=dict(size=10))),
+                        margin=dict(l=40, r=40, t=20, b=20),
+                        height=300,
+                    )
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    st.caption(f"总答题：{model.get('total_answered', 0)} | 正确率：{round(model.get('total_correct',0)/max(1,model.get('total_answered',1))*100)}% | 等级：{'⭐'*model.get('level',1)}")
+        except Exception:
+            pass
 
         # Module stats
         try:
