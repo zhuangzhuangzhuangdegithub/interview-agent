@@ -51,6 +51,7 @@ class UniversalAgent:
 薄弱模块优先出题，自适应调整难度。始终中文回复。"""
 
     def _call_openai(self, prompt: str, tools: list = None) -> str:
+        thinking = ["🤔 正在分析用户输入..."]
         messages = [{"role": "system", "content": self._build_system()}]
         history = load_conversation(self.user_id)
         for h in history[-10:]:
@@ -64,11 +65,11 @@ class UniversalAgent:
 
         resp = self._client.chat.completions.create(**kwargs)
         msg = resp.choices[0].message
+        content = msg.content or ""
 
-        # Handle tool calls
+        # Handle structured tool calls (OpenAI format)
         if msg.tool_calls:
-            thinking = [f"🔧 检测到 {len(msg.tool_calls)} 个工具调用"]
-            # MUST append assistant message before tool messages
+            thinking.append(f"🔧 Agent 决定调用 {len(msg.tool_calls)} 个工具")
             messages.append(msg)
 
             for tc in msg.tool_calls:
@@ -88,14 +89,49 @@ class UniversalAgent:
                     tool_text = "未知工具"
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
 
-            thinking.append("💭 分析结果并生成回复...")
+            thinking.append("💭 Agent 正在基于结果生成回复...")
             resp2 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
-            final = resp2.choices[0].message.content or ""
             self._last_thinking = thinking
-            return final
+            return resp2.choices[0].message.content or ""
 
-        self._last_thinking = []
-        return msg.content or ""
+        # Handle pseudo-XML tool calls (DeepSeek text format)
+        import re as _re
+        xml_match = _re.search(r"<search_questions>(.*?)</search_questions>|<get_question>(.*?)</get_question>", content, _re.DOTALL)
+        if xml_match and tools:
+            thinking.append("🔧 检测到文本格式工具调用（DeepSeek 模式）")
+            # Strip the XML from the response and re-query
+            clean_prompt = f"请实际执行工具调用。提示：{content[:200]}。用户原始请求：{prompt}"
+            thinking.append("🔄 重新请求 Agent 执行工具...")
+            resp2 = self._client.chat.completions.create(
+                model=self.model,
+                messages=messages + [{"role": "assistant", "content": "请使用 function calling 调用工具。"}],
+                tools=tools, tool_choice="auto", temperature=0.7
+            )
+            msg2 = resp2.choices[0].message
+            if msg2.tool_calls:
+                thinking.append(f"🔧 第二次尝试成功，调用 {len(msg2.tool_calls)} 个工具")
+                messages.append(msg2)
+                for tc in msg2.tool_calls:
+                    fn = tc.function.name; args = json.loads(tc.function.arguments)
+                    thinking.append(f"  📞 {fn}({json.dumps(args, ensure_ascii=False)})")
+                    if fn == "search_questions":
+                        results = db_search(keyword=args.get("query", ""), top_k=10)
+                        tool_text = "\n".join([f"ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "无结果"
+                    elif fn == "get_question":
+                        q = get_question_by_id(args.get("question_id", 0))
+                        tool_text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
+                    else:
+                        tool_text = "未知工具"
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
+                thinking.append("💭 生成最终回复...")
+                resp3 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
+                self._last_thinking = thinking
+                return resp3.choices[0].message.content or ""
+
+        # No tools, direct response
+        thinking.append("💬 直接回复（无需工具）")
+        self._last_thinking = thinking
+        return content
 
     def _call_claude(self, prompt: str) -> str:
         from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
