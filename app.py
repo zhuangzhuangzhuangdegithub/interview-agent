@@ -66,13 +66,14 @@ def review_tab():
     if "ri" not in st.session_state: st.session_state.ri = 0
     if "sa" not in st.session_state: st.session_state.sa = False
     if "mastered" not in st.session_state: st.session_state.mastered = set()
+    if "needs_review" not in st.session_state: st.session_state.needs_review = set()
     if "reviewed_count" not in st.session_state: st.session_state.reviewed_count = 0
 
     # Stats row
     total_q = len(search_questions(top_k=1000))
     mastered = len(st.session_state.mastered)
     reviewed = st.session_state.reviewed_count
-    pending = max(0, total_q - mastered)
+    pending = len(st.session_state.needs_review)
 
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.metric("题库", total_q)
@@ -139,11 +140,13 @@ def review_tab():
             with mc1:
                 if st.button("✅ 已掌握", use_container_width=True):
                     st.session_state.mastered.add(q["id"])
+                    st.session_state.needs_review.discard(q["id"])
                     st.session_state.reviewed_count += 1
                     st.session_state.sa = False
                     st.rerun()
             with mc2:
                 if st.button("🔄 再复习", use_container_width=True):
+                    st.session_state.needs_review.add(q["id"])
                     st.session_state.mastered.discard(q["id"])
                     st.session_state.reviewed_count += 1
                     st.session_state.sa = False
