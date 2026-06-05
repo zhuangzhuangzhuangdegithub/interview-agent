@@ -67,21 +67,40 @@ class UniversalAgent:
 
         # Handle tool calls
         if msg.tool_calls:
-            messages.append(msg)
+            thinking = []
             for tc in msg.tool_calls:
+                fn = tc.function.name
                 args = json.loads(tc.function.arguments)
-                if tc.function.name == "search_questions":
+                thinking.append(f"🔧 调用工具：{fn}({json.dumps(args, ensure_ascii=False)})")
+                if fn == "search_questions":
                     results = db_search(keyword=args.get("query", ""), top_k=10)
-                    text = "\n".join([f"ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "无结果"
-                elif tc.function.name == "get_question":
+                    text = "\n".join([f"  · ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "  无结果"
+                    thinking.append(f"📋 搜索结果：\n{text}")
+                elif fn == "get_question":
                     q = get_question_by_id(args.get("question_id", 0))
-                    text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
+                    text = f"  题目：{q['question'][:100]}..." if q else "  不存在"
+                    thinking.append(f"📖 获取题目：\n{text}")
                 else:
-                    text = "未知工具"
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": text})
-            resp2 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
-            return resp2.choices[0].message.content or ""
+                    thinking.append(f"  未知工具")
 
+                # Execute the actual tool call
+                if fn == "search_questions":
+                    results = db_search(keyword=args.get("query", ""), top_k=10)
+                    tool_text = "\n".join([f"ID:{r['id']} [{r['module']}] {r['question'][:80]}" for r in results]) or "无结果"
+                elif fn == "get_question":
+                    q = get_question_by_id(args.get("question_id", 0))
+                    tool_text = f"题目：{q['question']}\n答案：{q['answer']}" if q else "不存在"
+                else:
+                    tool_text = "未知工具"
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": tool_text})
+
+            thinking.append("💭 正在分析结果...")
+            resp2 = self._client.chat.completions.create(model=self.model, messages=messages, temperature=0.7)
+            final = resp2.choices[0].message.content or ""
+            self._last_thinking = thinking
+            return final
+
+        self._last_thinking = []
         return msg.content or ""
 
     def _call_claude(self, prompt: str) -> str:
@@ -166,5 +185,10 @@ class UniversalAgent:
     def generate_report(self) -> str:
         return self._call(f"生成本次练习报告。{format_user_context(self.user_id)}")
 
+    @property
+    def last_thinking(self) -> list:
+        return getattr(self, "_last_thinking", [])
+
     def reset(self):
+        self._last_thinking = []
         save_conversation(self.user_id, [])

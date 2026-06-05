@@ -76,6 +76,11 @@ def interview_tab():
                     resp = "已重置。"
                 else:
                     resp = agent.chat(prompt)
+            # Show thinking process if available
+            if hasattr(agent, "last_thinking") and agent.last_thinking:
+                with st.expander("🧠 查看思考过程"):
+                    for step in agent.last_thinking:
+                        st.caption(step)
             st.markdown(resp)
             st.session_state.messages.append({"role": "assistant", "content": resp})
             st.rerun()
