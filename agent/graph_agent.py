@@ -130,11 +130,10 @@ Always respond in Chinese. Be encouraging but professional."""
             return "tools"
         return END
 
-    def invoke(self, user_input: str, history: list = None) -> str:
-        """Main entry: user message -> agent response."""
+    def _invoke_graph(self, user_input: str, history: list = None) -> str:
+        """Internal: run graph with message."""
         msgs = list(history) if history else []
         msgs.append(HumanMessage(content=user_input))
-
         result = self.graph.invoke({
             "messages": msgs,
             "session_id": str(uuid.uuid4())[:8],
@@ -142,26 +141,29 @@ Always respond in Chinese. Be encouraging but professional."""
             "asked_ids": [],
             "mode": "idle",
         })
-
         last = result["messages"][-1]
         return last.content if hasattr(last, "content") else str(last)
 
-    def start_practice(self, module: str = None) -> str:
-        """Simplified: use graph to search and present a question."""
+    def chat(self, user_input: str) -> str:
+        """General chat."""
+        return self._invoke_graph(user_input)
+
+    def start_practice(self, module: str = None, difficulty: int = None) -> str:
+        """Search and present a question."""
         if module:
-            prompt = f"请从{module}模块随机选一道面试题展示给用户。"
+            prompt = f"请从{module}模块随机选一道面试题展示给用户，用中文回复。"
         else:
-            prompt = "请从题库中随机选一道面试题展示给用户。"
-        return self.invoke(prompt)
+            prompt = "请从题库中随机选一道面试题展示给用户，用中文回复。"
+        return self._invoke_graph(prompt)
 
     def evaluate_answer(self, user_answer: str) -> str:
         """Score user's answer."""
-        prompt = f"请对用户刚才的回答进行评分(1-10)并给出反馈和改进建议。用户的回答：{user_answer}"
-        return self.invoke(prompt)
+        prompt = f"请对用户刚才的回答进行评分(1-10)并给出反馈和建议。用户回答：{user_answer}"
+        return self._invoke_graph(prompt)
 
     def generate_report(self) -> str:
         """Generate session report."""
-        return self.invoke("请生成本次练习的总结报告。")
+        return self._invoke_graph("请生成本次练习的总结报告。")
 
     def reset(self):
-        pass  # Graph is stateless per invoke
+        pass
