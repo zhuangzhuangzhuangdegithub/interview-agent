@@ -29,6 +29,7 @@ class UniversalAgent:
         self.model = model or "deepseek-chat"
         self.user_id = "default"
         self._last_thinking = []
+        self._current_question = None  # Store current question for evaluation
         self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def _system(self) -> str:
@@ -141,22 +142,27 @@ class UniversalAgent:
 
         import random
         picked = random.choice(results)
+        self._current_question = picked  # Store for later evaluation
         stars = "⭐" * picked.get("difficulty", 2)
         return f"【模块】{picked['module']}  【难度】{stars}\n【标签】{', '.join(picked.get('tags', [])[:3])}\n\n📝 {picked['question']}"
 
     def evaluate_answer(self, user_answer: str) -> str:
-        history = load_conversation(self.user_id)
-        last_q = ""
-        for h in reversed(history):
-            if h.get("role") == "assistant" and ("【模块】" in h.get("content", "") or "题目" in h.get("content", "")):
-                last_q = h["content"][:300]
-                break
-        resp = self._call(f"评分(1-10)并反馈。题目：{last_q}\n回答：{user_answer}", use_tools=False)
+        q = self._current_question
+        if not q:
+            return "请先输入「练习」开始出题。"
+        question_text = q.get("question", "")
+        answer_text = q.get("answer", "")
+        module = q.get("module", "未知")
+        tags = q.get("tags", [])
+
+        resp = self._call(
+            f"评分(1-10)并反馈。\n【题目】{question_text}\n【参考答案】{answer_text[:500]}\n【用户回答】{user_answer}",
+            use_tools=False
+        )
         try:
             m = re.search(r"(\d+)/10|评分[：:]\s*(\d+)", resp)
             score = int(m.group(1) or m.group(2)) if m else 5
-            mod_m = re.search(r"【模块】(\S+)", last_q)
-            update_user_model(self.user_id, mod_m.group(1) if mod_m else "未知", score, [])
+            update_user_model(self.user_id, module, score, tags)
         except: pass
         return resp
 
@@ -165,4 +171,5 @@ class UniversalAgent:
 
     def reset(self):
         self._last_thinking = []
+        self._current_question = None
         save_conversation(self.user_id, [])
