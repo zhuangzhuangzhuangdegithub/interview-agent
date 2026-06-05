@@ -38,9 +38,9 @@ def main():
             st.markdown(msg["content"])
 
     # Chat input
-    placeholder = "输入'练习 LLM基础'开始出题"
+    placeholder = "练习 [模块] 开始出题 | 回答你的答案 | 报告 | 重置 | 快捷键 Ctrl+P/R/X"
     if st.session_state.mode == "waiting_answer":
-        placeholder = "请输入你的回答..."
+        placeholder = "输入你的回答，然后按 Enter 提交评分..."
 
     if prompt := st.chat_input(placeholder):
         st.session_state.messages.append({"role": "user", "content": prompt})
