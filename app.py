@@ -1,7 +1,7 @@
 """AI Interview Agent — Dual mode with sidebar navigation."""
 import streamlit as st
 import json, re, random
-from agent.cc_agent import CCSDKAgent
+from agent.universal_agent import UniversalAgent
 from tools.search import add_question, get_all_modules, search_questions
 from config import LLM_API_KEY as DEFAULT_KEY, LLM_API_BASE as DEFAULT_BASE, LLM_MODEL as DEFAULT_MODEL, PROJECT_ROOT
 
@@ -32,7 +32,7 @@ def interview_tab():
         current_model = st.session_state.get("user_api_model") or DEFAULT_MODEL
         # Recreate agent if API key changed or not exists
         if "agent" not in st.session_state or st.session_state.get("_agent_key") != current_key:
-            st.session_state.agent = CCSDKAgent(
+            st.session_state.agent = UniversalAgent(
                 api_key=current_key, base_url=current_base, model=current_model
             )
             st.session_state._agent_key = current_key
@@ -211,9 +211,10 @@ def main():
                 st.session_state.user_api_model = saved.get("model","")
 
             providers = {
-                "Anthropic Claude": {"base": "https://api.anthropic.com", "model": "claude-sonnet-4-6"},
                 "DeepSeek": {"base": "https://api.deepseek.com", "model": "deepseek-chat"},
                 "OpenAI": {"base": "https://api.openai.com/v1", "model": "gpt-4o"},
+                "Moonshot": {"base": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k"},
+                "Anthropic Claude": {"base": "https://api.anthropic.com", "model": "claude-sonnet-4-6"},
                 "通义千问": {"base": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
                 "自定义": {"base": "", "model": ""},
             }
