@@ -1,7 +1,7 @@
 """AI Interview Agent — Streamlit Web Interface."""
 import streamlit as st
 from agent.orchestrator import InterviewAgent
-from tools.search import add_question, get_all_modules
+from tools.search import add_question, get_all_modules, search_questions
 
 
 def main():
@@ -72,6 +72,22 @@ def main():
         st.subheader("状态")
         mode_labels = {"idle": "等待指令", "waiting_answer": "等待你回答题目"}
         st.info(f"当前模式：{mode_labels.get(st.session_state.mode, '未知')}")
+
+        # Module stats
+        try:
+            modules = get_all_modules()
+            total = 0
+            lines = []
+            for m in modules:
+                results = search_questions(module=m, top_k=1000)
+                count = len(results)
+                total += count
+                lines.append(f"· {m}：{count} 题")
+            with st.expander(f"📚 题库统计（共 {total} 题）"):
+                for line in lines:
+                    st.caption(line)
+        except Exception:
+            pass
 
         st.subheader("快捷操作")
         if st.button("🔄 重置会话", use_container_width=True):
