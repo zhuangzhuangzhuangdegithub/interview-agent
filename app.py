@@ -188,11 +188,23 @@ def main():
     with st.sidebar:
         st.subheader("⚙️ API 设置")
         with st.expander("配置 AI API"):
+            # Provider presets
+            providers = {
+                "DeepSeek": {"base": "https://api.deepseek.com", "model": "deepseek-chat"},
+                "OpenAI": {"base": "https://api.openai.com/v1", "model": "gpt-4o"},
+                "通义千问": {"base": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
+                "Moonshot": {"base": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k"},
+                "智谱GLM": {"base": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-4"},
+                "自定义": {"base": "", "model": ""},
+            }
+            provider = st.selectbox("模型提供商", list(providers.keys()),
+                index=0 if DEFAULT_BASE and "deepseek" in DEFAULT_BASE else 5)
+            preset = providers[provider]
+
             api_key = st.text_input("API Key", value=st.session_state.get("user_api_key",""),
-                                    placeholder="sk-...", type="password",
-                                    help="支持 DeepSeek / OpenAI / 兼容接口")
-            api_base = st.text_input("API Base URL", value=st.session_state.get("user_api_base") or DEFAULT_BASE)
-            api_model = st.text_input("Model", value=st.session_state.get("user_api_model") or DEFAULT_MODEL)
+                                    placeholder="sk-...", type="password")
+            api_base = st.text_input("API Base URL", value=st.session_state.get("user_api_base") or preset["base"] or DEFAULT_BASE)
+            api_model = st.text_input("Model", value=st.session_state.get("user_api_model") or preset["model"] or DEFAULT_MODEL)
             if st.button("保存设置", use_container_width=True):
                 st.session_state.user_api_key = api_key
                 st.session_state.user_api_base = api_base
