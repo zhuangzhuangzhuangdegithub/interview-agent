@@ -13,6 +13,7 @@ sys.path.insert(0, "D:/whu/大三下/练习/agent")
 from config import LLM_API_KEY, LLM_API_BASE, LLM_MODEL
 from tools.search import search_questions as db_search, get_question_by_id
 from tools.practice import save_practice_record, get_user_profile, update_user_profile
+from agent.memory import save_conversation, load_conversation, update_user_model, format_user_context, get_adaptive_difficulty, get_weak_modules
 
 
 # Define tools
@@ -65,20 +66,23 @@ class InterviewGraphAgent:
         self.tools = [search_questions_tool, get_question_tool]
         self.llm_with_tools = self.llm.bind_tools(self.tools)
 
-        self.system_prompt = """You are an AI interview coach. Help users practice technical interview questions.
+        self.user_id = "default"
+        self.history = []
+        self.system_prompt = """You are an AI interview coach with memory. You remember the user's past performance and adapt.
 
 CAPABILITIES:
 - Search the question bank for relevant questions
 - Retrieve full question details by ID
 - Evaluate user answers and provide feedback
+- Track user's strengths and weaknesses over time
 
 WORKFLOW:
-1. When user says "练习" or "practice" with a module name, use search_questions_tool to find questions
-2. Pick a question and use get_question_tool to show it
-3. Wait for user's answer
-4. Evaluate: score 1-10, give feedback. If <7 give hint, if 7-8 ask follow-up, if >8 confirm and offer next
+1. When user says "练习" with a module, search and present a question
+2. When user answers, evaluate: score 1-10, give specific feedback
+3. Adapt difficulty based on user's past performance
+4. Prioritize user's weak areas for targeted practice
 
-Always respond in Chinese. Be encouraging but professional."""
+Always respond in Chinese. Be encouraging but professional. Reference the user's past performance when relevant."""
 
         self.graph = self._build_graph()
 
@@ -130,40 +134,76 @@ Always respond in Chinese. Be encouraging but professional."""
             return "tools"
         return END
 
-    def _invoke_graph(self, user_input: str, history: list = None) -> str:
-        """Internal: run graph with message."""
-        msgs = list(history) if history else []
-        msgs.append(HumanMessage(content=user_input))
+    def _invoke_graph(self, user_input: str) -> str:
+        """Internal: run graph with memory context."""
+        # Load history from Redis
+        history = load_conversation(self.user_id)
+        # Build context-rich system prompt
+        user_ctx = format_user_context(self.user_id)
+        ctx_msg = SystemMessage(content=self.system_prompt + f"\n\nCurrent User Context:\n{user_ctx}")
+
+        msgs = [ctx_msg] + history[-20:] + [HumanMessage(content=user_input)]
+
         result = self.graph.invoke({
             "messages": msgs,
-            "session_id": str(uuid.uuid4())[:8],
+            "session_id": self.user_id,
             "current_question": None,
             "asked_ids": [],
             "mode": "idle",
         })
+
+        # Save conversation to Redis
+        self.history = history + [
+            HumanMessage(content=user_input),
+            result["messages"][-1]
+        ]
+        save_conversation(self.user_id, self.history)
+
         last = result["messages"][-1]
         return last.content if hasattr(last, "content") else str(last)
 
     def chat(self, user_input: str) -> str:
-        """General chat."""
         return self._invoke_graph(user_input)
 
     def start_practice(self, module: str = None, difficulty: int = None) -> str:
-        """Search and present a question."""
-        if module:
-            prompt = f"请从{module}模块随机选一道面试题展示给用户，用中文回复。"
+        adapt_diff = difficulty or get_adaptive_difficulty(self.user_id)
+        weak = get_weak_modules(self.user_id)
+        mod = module or (weak[0] if weak else None)
+        if mod:
+            prompt = f"请从{mod}模块选一道难度{adapt_diff}的面试题。用户薄弱模块包括：{', '.join(weak[:3])}。"
         else:
-            prompt = "请从题库中随机选一道面试题展示给用户，用中文回复。"
+            prompt = f"请从题库中随机选一道难度{adapt_diff}的面试题。"
         return self._invoke_graph(prompt)
 
     def evaluate_answer(self, user_answer: str) -> str:
-        """Score user's answer."""
-        prompt = f"请对用户刚才的回答进行评分(1-10)并给出反馈和建议。用户回答：{user_answer}"
-        return self._invoke_graph(prompt)
+        # Get last question info from history
+        history = load_conversation(self.user_id)
+        last_q = ""
+        for msg in reversed(history):
+            if hasattr(msg, "content") and "【模块】" in str(msg.content):
+                last_q = str(msg.content)[:200]
+                break
+        prompt = f"请评分(1-10)并反馈。最近题目：{last_q}\n用户回答：{user_answer}"
+        resp = self._invoke_graph(prompt)
+
+        # Update user model (simplified scoring - extract score from response)
+        try:
+            import re
+            score_match = re.search(r"(\d+)/10|评分[：:]\s*(\d+)", resp)
+            score = int(score_match.group(1) or score_match.group(2)) if score_match else 5
+            # Extract module from last question
+            mod_match = re.search(r"【模块】(\S+)", last_q)
+            module = mod_match.group(1) if mod_match else "未知"
+            update_user_model(self.user_id, module, score, [])
+        except:
+            pass
+
+        return resp
 
     def generate_report(self) -> str:
-        """Generate session report."""
-        return self._invoke_graph("请生成本次练习的总结报告。")
+        ctx = format_user_context(self.user_id)
+        return self._invoke_graph(f"请生成练习报告。{ctx}")
 
     def reset(self):
-        pass
+        self.history = []
+        save_conversation(self.user_id, [])
