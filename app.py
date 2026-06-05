@@ -10,18 +10,25 @@ import plotly.express as px
 
 USER_CONFIG_FILE = PROJECT_ROOT + "/user_config.json"
 
-def load_user_config():
+def load_user_config(username: str = "default"):
     """Load saved user API config from local file."""
     try:
         with open(USER_CONFIG_FILE, "r") as f:
-            return json.load(f)
+            all_users = json.load(f)
+            return all_users.get(username, {})
     except:
         return {}
 
-def save_user_config(data: dict):
-    """Save user API config to local file."""
+def save_user_config(username: str, data: dict):
+    """Save user API config to local file, keyed by username."""
+    try:
+        with open(USER_CONFIG_FILE, "r") as f:
+            all_users = json.load(f)
+    except:
+        all_users = {}
+    all_users[username] = data
     with open(USER_CONFIG_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(all_users, f)
 
 
 def interview_tab():
@@ -35,9 +42,10 @@ def interview_tab():
         current_model = st.session_state.get("user_api_model") or DEFAULT_MODEL
         # Recreate agent if API key changed or not exists
         if "agent" not in st.session_state or st.session_state.get("_agent_key") != current_key:
-            st.session_state.agent = UniversalAgent(
-                api_key=current_key, base_url=current_base, model=current_model
-            )
+            user = st.session_state.get("username", "默认用户")
+            ag = UniversalAgent(api_key=current_key, base_url=current_base, model=current_model)
+            ag.user_id = user
+            st.session_state.agent = ag
             st.session_state._agent_key = current_key
         agent = st.session_state.agent
     else:
@@ -101,18 +109,22 @@ def interview_tab():
 def review_tab():
     """自主刷题 with mastery tracking"""
     st.markdown("## 📝 自主刷题")
-    if "rq" not in st.session_state: st.session_state.rq = []
-    if "ri" not in st.session_state: st.session_state.ri = 0
-    if "sa" not in st.session_state: st.session_state.sa = False
-    if "mastered" not in st.session_state: st.session_state.mastered = set()
-    if "needs_review" not in st.session_state: st.session_state.needs_review = set()
-    if "reviewed_count" not in st.session_state: st.session_state.reviewed_count = 0
+    user = st.session_state.get("username", "默认用户")
+    # Per-user session keys
+    rq_key = f"rq_{user}"; ri_key = f"ri_{user}"; sa_key = f"sa_{user}"
+    mastered_key = f"mastered_{user}"; review_key = f"needs_review_{user}"; count_key = f"reviewed_count_{user}"
+    if rq_key not in st.session_state: st.session_state[rq_key] = []
+    if ri_key not in st.session_state: st.session_state[ri_key] = 0
+    if sa_key not in st.session_state: st.session_state[sa_key] = False
+    if mastered_key not in st.session_state: st.session_state[mastered_key] = set()
+    if review_key not in st.session_state: st.session_state[review_key] = set()
+    if count_key not in st.session_state: st.session_state[count_key] = 0
 
     # Stats row
     total_q = len(search_questions(top_k=1000))
-    mastered = len(st.session_state.mastered)
-    reviewed = st.session_state.reviewed_count
-    pending = len(st.session_state.needs_review)
+    mastered = len(st.session_state[mastered_key])
+    reviewed = st.session_state[count_key]
+    pending = len(st.session_state[review_key])
 
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.metric("题库", total_q)
@@ -137,18 +149,18 @@ def review_tab():
         if results:
             random.shuffle(results)
             if mode_filter == "仅未掌握":
-                results = [r for r in results if r["id"] not in st.session_state.mastered]
-            st.session_state.rq = results; st.session_state.ri = 0; st.session_state.sa = False
+                results = [r for r in results if r["id"] not in st.session_state[mastered_key]]
+            st.session_state[rq_key] = results; st.session_state[ri_key] = 0; st.session_state[sa_key] = False
             st.rerun()
 
-    if not st.session_state.rq:
+    if not st.session_state[rq_key]:
         results = search_questions(top_k=100)
         if results:
             random.shuffle(results)
             if mode_filter == "仅未掌握":
-                results = [r for r in results if r["id"] not in st.session_state.mastered]
-            st.session_state.rq = results
-    questions = st.session_state.rq
+                results = [r for r in results if r["id"] not in st.session_state[mastered_key]]
+            st.session_state[rq_key] = results
+    questions = st.session_state[rq_key]
     total = len(questions)
     if total == 0:
         if mode_filter == "仅未掌握":
@@ -157,52 +169,52 @@ def review_tab():
             st.warning("题库为空")
         return
 
-    idx = st.session_state.ri
-    if idx >= total: idx = 0; st.session_state.ri = 0
+    idx = st.session_state[ri_key]
+    if idx >= total: idx = 0; st.session_state[ri_key] = 0
     st.progress((idx+1)/total, f"第 {idx+1} / {total} 题")
     q = questions[idx]
 
     with st.container(border=True):
         stars = "⭐" * q.get("difficulty", 2)
-        mastered_str = "✅ 已掌握" if q["id"] in st.session_state.mastered else ""
+        mastered_str = "✅ 已掌握" if q["id"] in st.session_state[mastered_key] else ""
         st.caption(f"{q.get('module','')} · {stars}  {mastered_str}")
         st.markdown(f"### {q['question']}")
 
-        btn_label = "💡 查看答案" if not st.session_state.sa else "🙈 隐藏答案"
+        btn_label = "💡 查看答案" if not st.session_state[sa_key] else "🙈 隐藏答案"
         if st.button(btn_label, use_container_width=True):
-            st.session_state.sa = not st.session_state.sa; st.rerun()
-        if st.session_state.sa:
+            st.session_state[sa_key] = not st.session_state[sa_key]; st.rerun()
+        if st.session_state[sa_key]:
             st.divider(); st.markdown(q.get("answer","暂无答案"))
 
             # Mastery buttons
             mc1, mc2 = st.columns(2)
             with mc1:
                 if st.button("✅ 已掌握", use_container_width=True):
-                    st.session_state.mastered.add(q["id"])
-                    st.session_state.needs_review.discard(q["id"])
-                    st.session_state.reviewed_count += 1
-                    st.session_state.sa = False
+                    st.session_state[mastered_key].add(q["id"])
+                    st.session_state[review_key].discard(q["id"])
+                    st.session_state[count_key] += 1
+                    st.session_state[sa_key] = False
                     st.rerun()
             with mc2:
                 if st.button("🔄 再复习", use_container_width=True):
-                    st.session_state.needs_review.add(q["id"])
-                    st.session_state.mastered.discard(q["id"])
-                    st.session_state.reviewed_count += 1
-                    st.session_state.sa = False
+                    st.session_state[review_key].add(q["id"])
+                    st.session_state[mastered_key].discard(q["id"])
+                    st.session_state[count_key] += 1
+                    st.session_state[sa_key] = False
                     if idx < total - 1:
-                        st.session_state.ri = idx + 1
+                        st.session_state[ri_key] = idx + 1
                     st.rerun()
 
     # Navigation
     c1,c2,c3 = st.columns([1,2,1])
     with c1:
         if st.button("⬅ 上一题", disabled=idx==0, use_container_width=True):
-            st.session_state.ri = max(0, idx-1); st.session_state.sa = False; st.rerun()
+            st.session_state[ri_key] = max(0, idx-1); st.session_state[sa_key] = False; st.rerun()
     with c2:
         st.caption(f"第 {idx+1} / {total} 题")
     with c3:
         if st.button("下一题 ➡", disabled=idx>=total-1, use_container_width=True):
-            st.session_state.ri = min(total-1, idx+1); st.session_state.sa = False; st.rerun()
+            st.session_state[ri_key] = min(total-1, idx+1); st.session_state[sa_key] = False; st.rerun()
 
     st.markdown("""<script>
     document.addEventListener('keydown', function(e) {
@@ -216,16 +228,26 @@ def main():
     st.set_page_config(page_title="AI 面试陪练", page_icon="🤖")
     if "page" not in st.session_state: st.session_state.page = "interview"
     own_key = bool(st.session_state.get("user_api_key")) or bool(DEFAULT_KEY)
+    if "username" not in st.session_state: st.session_state.username = "默认用户"
+    username = st.session_state.username
 
     with st.sidebar:
-        st.subheader("🌐 访问地址")
-        st.caption("公网：https://cobalt-amusement-landless.ngrok-free.dev")
+        st.subheader("🌐 公网地址")
+        st.caption("https://cobalt-amusement-landless.ngrok-free.dev")
+
+        st.divider()
+        st.subheader("👤 用户")
+        new_name = st.text_input("你的名字", value=username)
+        if new_name != username:
+            st.session_state.username = new_name
+            if "agent" in st.session_state: del st.session_state.agent
+            st.rerun()
 
         st.divider()
         st.subheader("⚙️ API 设置")
         with st.expander("配置 AI API"):
-            # Load saved config from file
-            saved = load_user_config()
+            # Load saved config for this user
+            saved = load_user_config(username)
             if not st.session_state.get("user_api_key") and saved.get("key"):
                 st.session_state.user_api_key = saved["key"]
                 st.session_state.user_api_base = saved.get("base","")
@@ -251,7 +273,7 @@ def main():
                 st.session_state.user_api_key = api_key
                 st.session_state.user_api_base = api_base
                 st.session_state.user_api_model = api_model
-                save_user_config({"key": api_key, "base": api_base, "model": api_model})
+                save_user_config(username, {"key": api_key, "base": api_base, "model": api_model})
                 if "agent" in st.session_state: del st.session_state.agent
                 st.success("已保存到本地，刷新浏览器后依然有效")
                 st.rerun()
