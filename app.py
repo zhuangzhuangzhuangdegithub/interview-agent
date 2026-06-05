@@ -121,6 +121,7 @@ def main():
         st.subheader("➕ 添加题目")
 
         # File upload
+        st.caption("支持 JSON / Markdown / TXT 格式。JSON 格式：`[{\"question\":\"...\",\"answer\":\"...\",\"tags\":[...]}]`。MD/TXT 格式：每行 `Q: 题目` 后接答案段落。")
         uploaded_file = st.file_uploader("📁 一键导入文件", type=["json", "md", "txt"], key="file_upload")
         if uploaded_file is not None:
             default_module = st.selectbox("导入到模块", get_all_modules() or ["LLM基础"], key="import_module")
