@@ -9,16 +9,24 @@ def interview_tab():
     """AI 面试陪练"""
     if "messages" not in st.session_state: st.session_state.messages = []
     if "mode" not in st.session_state: st.session_state.mode = "idle"
-    if "agent" not in st.session_state:
-        st.session_state.agent = InterviewAgent(
-            api_key=st.session_state.get("user_api_key"),
-            base_url=st.session_state.get("user_api_base"),
-            model=st.session_state.get("user_api_model"),
-        )
-    agent = st.session_state.agent
+    has_api = bool(st.session_state.get("user_api_key"))
+    if has_api:
+        if "agent" not in st.session_state:
+            st.session_state.agent = InterviewAgent(
+                api_key=st.session_state.get("user_api_key"),
+                base_url=st.session_state.get("user_api_base"),
+                model=st.session_state.get("user_api_model"),
+            )
+        agent = st.session_state.agent
+    else:
+        agent = None
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+    if not has_api:
+        st.warning("⚠️ 请先在侧边栏「⚙️ API 设置」中配置你的 API Key，才能使用 AI 面试陪练功能。自主刷题模式不需要 API Key。")
+        return
 
     placeholder = "请输入 练习（模块名称） 将会开始出题，如：练习 Agent架构"
     if st.session_state.mode == "waiting_answer":
@@ -172,11 +180,14 @@ def main():
         except: pass
 
         if st.session_state.page == "interview":
-            if st.button("🔄 重置会话", use_container_width=True):
-                st.session_state.messages = []; st.session_state.mode = "idle"; st.rerun()
-            if st.button("📊 生成报告", use_container_width=True):
-                if "agent" in st.session_state:
-                    st.info(st.session_state.agent.generate_report())
+            if has_api:
+                if st.button("🔄 重置会话", use_container_width=True):
+                    st.session_state.messages = []; st.session_state.mode = "idle"; st.rerun()
+                if st.button("📊 生成报告", use_container_width=True):
+                    if "agent" in st.session_state:
+                        st.info(st.session_state.agent.generate_report())
+            else:
+                st.caption("配置 API Key 后可使用")
 
         st.divider()
         st.subheader("📁 一键导入题库")
