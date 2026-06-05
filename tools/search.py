@@ -97,3 +97,41 @@ def get_question_by_id(question_id: int) -> dict:
             "module": row[3], "difficulty": row[4], "tags": row[5]
         }
     return None
+
+
+def add_question(question: str, answer: str, module: str, difficulty: int, tags: list = None) -> int:
+    """Add a new question to the database. Returns the new question ID."""
+    import json, numpy as np
+    conn = psycopg2.connect(
+        host=PG_HOST, port=PG_PORT, dbname=PG_DATABASE,
+        user=PG_USER, password=PG_PASSWORD
+    )
+    cur = conn.cursor()
+    tag_str = "{" + ",".join(tags) + "}" if tags else "{}"
+    cur.execute(
+        """INSERT INTO questions (question, answer, module, difficulty, tags)
+           VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+        (question, answer, module, difficulty, tag_str)
+    )
+    qid = cur.fetchone()[0]
+    emb = np.random.randn(1536).astype(np.float32)
+    emb = emb / np.linalg.norm(emb)
+    cur.execute("UPDATE questions SET embedding = %s WHERE id = %s", (json.dumps(emb.tolist()), qid))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return qid
+
+
+def get_all_modules() -> list:
+    """Get distinct module names."""
+    conn = psycopg2.connect(
+        host=PG_HOST, port=PG_PORT, dbname=PG_DATABASE,
+        user=PG_USER, password=PG_PASSWORD
+    )
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT module FROM questions ORDER BY module")
+    rows = [r[0] for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows

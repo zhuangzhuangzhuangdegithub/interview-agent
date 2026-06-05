@@ -1,6 +1,7 @@
 """AI Interview Agent — Streamlit Web Interface."""
 import streamlit as st
 from agent.orchestrator import InterviewAgent
+from tools.search import add_question, get_all_modules
 
 
 def main():
@@ -81,6 +82,30 @@ def main():
         if st.button("📊 生成报告", use_container_width=True):
             report = agent.generate_report()
             st.info(report)
+
+        st.divider()
+        st.subheader("➕ 添加自定义题目")
+        with st.expander("展开添加"):
+            with st.form("add_question_form"):
+                q_text = st.text_area("题目", placeholder="输入面试题目...")
+                a_text = st.text_area("参考答案", placeholder="输入参考答案...")
+                col1, col2 = st.columns(2)
+                with col1:
+                    existing_modules = get_all_modules()
+                    default_modules = ["LLM基础", "Agent架构", "RAG与知识库", "Prompt工程", "工具调用与工作流", "微调与部署"]
+                    all_modules = existing_modules if existing_modules else default_modules
+                    module = st.selectbox("模块", all_modules)
+                with col2:
+                    difficulty = st.selectbox("难度", [1, 2, 3], format_func=lambda x: ["初级", "中级", "高级"][x-1])
+                tags_str = st.text_input("标签（逗号分隔）", placeholder="如: Transformer, Attention")
+                if st.form_submit_button("添加题目", use_container_width=True):
+                    if q_text.strip() and a_text.strip():
+                        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+                        qid = add_question(q_text.strip(), a_text.strip(), module, difficulty, tags)
+                        st.success(f"已添加题目 #{qid} 到 {module} 模块")
+                        st.rerun()
+                    else:
+                        st.error("题目和答案不能为空")
 
 
 if __name__ == "__main__":
