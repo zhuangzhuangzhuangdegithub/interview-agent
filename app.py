@@ -223,7 +223,7 @@ def main():
             preset = providers[provider]
 
             api_key = st.text_input("API Key", value=st.session_state.get("user_api_key",""),
-                                    placeholder="sk-...", type="password")
+                                    placeholder="输入 API 密钥...", type="password")
             api_base = st.text_input("API Base URL", value=st.session_state.get("user_api_base") or preset["base"] or DEFAULT_BASE)
             api_model = st.text_input("Model", value=st.session_state.get("user_api_model") or preset["model"] or DEFAULT_MODEL)
             if st.button("保存设置", use_container_width=True):
