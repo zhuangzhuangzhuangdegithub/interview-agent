@@ -131,10 +131,13 @@ class UniversalAgent:
     def start_practice(self, module: str = None, difficulty: int = None) -> str:
         diff = difficulty or get_adaptive_difficulty(self.user_id)
         weak = get_weak_modules(self.user_id)
-        mod = module or (weak[0] if weak else None)
-        if mod:
-            return self._call(f"请调用 search_questions(query='{mod}') 搜索，选一道难度{diff}的题展示。只出题不展示答案。")
-        return self._call(f"请调用 search_questions(query='LLM基础') 搜索，选一道难度{diff}的题展示。只出题不展示答案。")
+        mod = module or (weak[0] if weak else "LLM基础")
+        return self._call(
+            f"请立即调用 search_questions(query='{mod}') 搜索题库。"
+            f"然后从返回结果中直接选一题展示给用户。"
+            f"必须展示完整的题目文字。不要询问用户想搜什么，不要建议其他搜索词。"
+            f"格式：【模块】XXX 【难度】⭐ 【题目】XXX"
+        )
 
     def evaluate_answer(self, user_answer: str) -> str:
         history = load_conversation(self.user_id)
