@@ -9,7 +9,6 @@ def interview_tab():
     """AI 面试陪练"""
     if "messages" not in st.session_state: st.session_state.messages = []
     if "mode" not in st.session_state: st.session_state.mode = "idle"
-    has_api = bool(st.session_state.get("user_api_key"))
     if has_api:
         if "agent" not in st.session_state:
             st.session_state.agent = InterviewAgent(
@@ -173,6 +172,9 @@ def review_tab():
 def main():
     st.set_page_config(page_title="AI 面试陪练", page_icon="🤖")
     if "page" not in st.session_state: st.session_state.page = "interview"
+
+    # Shared state
+    has_api = bool(st.session_state.get("user_api_key"))
 
     with st.sidebar:
         st.subheader("⚙️ API 设置")
