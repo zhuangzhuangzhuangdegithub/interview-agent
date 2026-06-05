@@ -218,6 +218,11 @@ def main():
     own_key = bool(st.session_state.get("user_api_key")) or bool(DEFAULT_KEY)
 
     with st.sidebar:
+        st.subheader("🌐 访问地址")
+        st.caption("局域网：http://10.138.196.221:7860")
+        st.caption("外网：http://222.20.193.39:7860")
+
+        st.divider()
         st.subheader("⚙️ API 设置")
         with st.expander("配置 AI API"):
             # Load saved config from file
