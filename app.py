@@ -1,7 +1,7 @@
 """AI Interview Agent — Dual mode with sidebar navigation."""
 import streamlit as st
 import json, re, random
-from agent.orchestrator import InterviewAgent
+from agent.graph_agent import InterviewGraphAgent
 from tools.search import add_question, get_all_modules, search_questions
 
 
@@ -12,7 +12,7 @@ def interview_tab():
     own_key = bool(st.session_state.get("user_api_key"))
     if own_key:
         if "agent" not in st.session_state:
-            st.session_state.agent = InterviewAgent(
+            st.session_state.agent = InterviewGraphAgent(
                 api_key=st.session_state.get("user_api_key"),
                 base_url=st.session_state.get("user_api_base"),
                 model=st.session_state.get("user_api_model"),
