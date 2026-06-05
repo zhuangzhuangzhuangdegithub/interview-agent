@@ -15,19 +15,12 @@ from tools.practice import save_practice_record, get_user_profile, update_user_p
 
 class InterviewAgent:
 
-    def __init__(self):
-        self.llm = ChatOpenAI(
-            api_key=LLM_API_KEY,
-            base_url=LLM_API_BASE,
-            model=LLM_MODEL,
-            temperature=0.7,
-        )
-        self.embedding_llm = ChatOpenAI(
-            api_key=LLM_API_KEY,
-            base_url=LLM_API_BASE,
-            model=LLM_MODEL,
-            temperature=0.0,
-        )
+    def __init__(self, api_key: str = None, base_url: str = None, model: str = None):
+        key = api_key or LLM_API_KEY
+        url = base_url or LLM_API_BASE
+        mdl = model or LLM_MODEL
+        self.llm = ChatOpenAI(api_key=key, base_url=url, model=mdl, temperature=0.7)
+        self.embedding_llm = ChatOpenAI(api_key=key, base_url=url, model=mdl, temperature=0.0)
         self.session_id = str(uuid.uuid4())[:8]
         self.history: list = []
         self.current_question: dict = None

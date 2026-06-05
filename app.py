@@ -9,7 +9,12 @@ def interview_tab():
     """AI 面试陪练"""
     if "messages" not in st.session_state: st.session_state.messages = []
     if "mode" not in st.session_state: st.session_state.mode = "idle"
-    if "agent" not in st.session_state: st.session_state.agent = InterviewAgent()
+    if "agent" not in st.session_state:
+        st.session_state.agent = InterviewAgent(
+            api_key=st.session_state.get("user_api_key"),
+            base_url=st.session_state.get("user_api_base"),
+            model=st.session_state.get("user_api_model"),
+        )
     agent = st.session_state.agent
 
     for msg in st.session_state.messages:
@@ -117,6 +122,22 @@ def main():
     if "page" not in st.session_state: st.session_state.page = "interview"
 
     with st.sidebar:
+        st.subheader("⚙️ API 设置")
+        with st.expander("配置 AI API"):
+            api_key = st.text_input("API Key", value=st.session_state.get("user_api_key",""),
+                                    placeholder="sk-...", type="password",
+                                    help="支持 DeepSeek / OpenAI / 兼容接口")
+            api_base = st.text_input("API Base URL", value=st.session_state.get("user_api_base","https://api.deepseek.com"))
+            api_model = st.text_input("Model", value=st.session_state.get("user_api_model","deepseek-chat"))
+            if st.button("保存设置", use_container_width=True):
+                st.session_state.user_api_key = api_key
+                st.session_state.user_api_base = api_base
+                st.session_state.user_api_model = api_model
+                if "agent" in st.session_state: del st.session_state.agent
+                st.success("已保存")
+                st.rerun()
+
+        st.divider()
         st.subheader("📌 选择模式")
 
         c1, c2 = st.columns(2)
