@@ -3,19 +3,20 @@ import streamlit as st
 import json, re, random
 from agent.graph_agent import InterviewGraphAgent
 from tools.search import add_question, get_all_modules, search_questions
+from config import LLM_API_KEY as DEFAULT_KEY, LLM_API_BASE as DEFAULT_BASE, LLM_MODEL as DEFAULT_MODEL
 
 
 def interview_tab():
     """AI 面试陪练"""
     if "messages" not in st.session_state: st.session_state.messages = []
     if "mode" not in st.session_state: st.session_state.mode = "idle"
-    own_key = bool(st.session_state.get("user_api_key"))
+    own_key = bool(st.session_state.get("user_api_key")) or bool(DEFAULT_KEY)
     if own_key:
         if "agent" not in st.session_state:
             st.session_state.agent = InterviewGraphAgent(
-                api_key=st.session_state.get("user_api_key"),
-                base_url=st.session_state.get("user_api_base"),
-                model=st.session_state.get("user_api_model"),
+                api_key=st.session_state.get("user_api_key") or DEFAULT_KEY,
+                base_url=st.session_state.get("user_api_base") or DEFAULT_BASE,
+                model=st.session_state.get("user_api_model") or DEFAULT_MODEL,
             )
         agent = st.session_state.agent
     else:
@@ -183,8 +184,8 @@ def main():
             api_key = st.text_input("API Key", value=st.session_state.get("user_api_key",""),
                                     placeholder="sk-...", type="password",
                                     help="支持 DeepSeek / OpenAI / 兼容接口")
-            api_base = st.text_input("API Base URL", value=st.session_state.get("user_api_base","https://api.deepseek.com"))
-            api_model = st.text_input("Model", value=st.session_state.get("user_api_model","deepseek-chat"))
+            api_base = st.text_input("API Base URL", value=st.session_state.get("user_api_base") or DEFAULT_BASE)
+            api_model = st.text_input("Model", value=st.session_state.get("user_api_model") or DEFAULT_MODEL)
             if st.button("保存设置", use_container_width=True):
                 st.session_state.user_api_key = api_key
                 st.session_state.user_api_base = api_base
@@ -228,7 +229,7 @@ def main():
         except: pass
 
         if st.session_state.page == "interview":
-            if bool(st.session_state.get("user_api_key")):
+            if own_key:
                 if st.button("🔄 重置会话", use_container_width=True):
                     st.session_state.messages = []; st.session_state.mode = "idle"; st.rerun()
                 if st.button("📊 生成报告", use_container_width=True):
