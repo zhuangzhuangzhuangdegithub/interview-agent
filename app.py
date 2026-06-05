@@ -1,5 +1,7 @@
 """AI Interview Agent — Streamlit Web Interface."""
 import streamlit as st
+import json
+import re
 from agent.orchestrator import InterviewAgent
 from tools.search import add_question, get_all_modules, search_questions
 
@@ -116,8 +118,55 @@ def main():
             st.info(report)
 
         st.divider()
-        st.subheader("➕ 添加自定义题目")
-        with st.expander("展开添加"):
+        st.subheader("➕ 添加题目")
+
+        # File upload
+        uploaded_file = st.file_uploader("📁 一键导入文件", type=["json", "md", "txt"], key="file_upload")
+        if uploaded_file is not None:
+            default_module = st.selectbox("导入到模块", get_all_modules() or ["LLM基础"], key="import_module")
+            if st.button("开始导入", use_container_width=True):
+                content = uploaded_file.read().decode("utf-8")
+                count = 0
+                if uploaded_file.name.endswith(".json"):
+                    try:
+                        data = json.loads(content)
+                        for item in data if isinstance(data, list) else [data]:
+                            q = item.get("question", "") or item.get("q", "")
+                            a = item.get("answer", "") or item.get("a", "")
+                            if q and a:
+                                add_question(q, a, default_module,
+                                    item.get("difficulty", 2),
+                                    item.get("tags", []))
+                                count += 1
+                    except json.JSONDecodeError:
+                        st.error("JSON 格式错误")
+                else:
+                    # Markdown/TXT: split by ## or Q:/A: patterns
+                    blocks = re.split(r"\n(?=## |Q[:：]|\d+\.\s*)", content)
+                    q = None
+                    for block in blocks:
+                        block = block.strip()
+                        if not block:
+                            continue
+                        qm = re.match(r"(?:##\s*)?Q[:：]\s*(.+)", block)
+                        if qm:
+                            q = qm.group(1)
+                            continue
+                        # Answer
+                        if q and len(block) > 10:
+                            add_question(q, block, default_module, 2, [])
+                            count += 1
+                            q = None
+                if count > 0:
+                    st.success(f"成功导入 {count} 道题目到 {default_module}")
+                    st.rerun()
+                else:
+                    st.warning("未识别到有效题目")
+
+        st.divider()
+
+        # Manual add
+        with st.expander("✏️ 手动添加"):
             with st.form("add_question_form"):
                 q_text = st.text_area("题目", placeholder="输入面试题目...")
                 a_text = st.text_area("参考答案", placeholder="输入参考答案...")
