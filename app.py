@@ -3,7 +3,22 @@ import streamlit as st
 import json, re, random
 from agent.graph_agent import InterviewGraphAgent
 from tools.search import add_question, get_all_modules, search_questions
-from config import LLM_API_KEY as DEFAULT_KEY, LLM_API_BASE as DEFAULT_BASE, LLM_MODEL as DEFAULT_MODEL
+from config import LLM_API_KEY as DEFAULT_KEY, LLM_API_BASE as DEFAULT_BASE, LLM_MODEL as DEFAULT_MODEL, PROJECT_ROOT
+
+USER_CONFIG_FILE = PROJECT_ROOT + "/user_config.json"
+
+def load_user_config():
+    """Load saved user API config from local file."""
+    try:
+        with open(USER_CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_user_config(data: dict):
+    """Save user API config to local file."""
+    with open(USER_CONFIG_FILE, "w") as f:
+        json.dump(data, f)
 
 
 def interview_tab():
@@ -188,7 +203,13 @@ def main():
     with st.sidebar:
         st.subheader("⚙️ API 设置")
         with st.expander("配置 AI API"):
-            # Provider presets
+            # Load saved config from file
+            saved = load_user_config()
+            if not st.session_state.get("user_api_key") and saved.get("key"):
+                st.session_state.user_api_key = saved["key"]
+                st.session_state.user_api_base = saved.get("base","")
+                st.session_state.user_api_model = saved.get("model","")
+
             providers = {
                 "DeepSeek": {"base": "https://api.deepseek.com", "model": "deepseek-chat"},
                 "OpenAI": {"base": "https://api.openai.com/v1", "model": "gpt-4o"},
@@ -209,8 +230,9 @@ def main():
                 st.session_state.user_api_key = api_key
                 st.session_state.user_api_base = api_base
                 st.session_state.user_api_model = api_model
+                save_user_config({"key": api_key, "base": api_base, "model": api_model})
                 if "agent" in st.session_state: del st.session_state.agent
-                st.success("已保存")
+                st.success("已保存到本地，刷新浏览器后依然有效")
                 st.rerun()
 
         st.divider()
